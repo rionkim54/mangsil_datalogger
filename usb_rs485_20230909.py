@@ -5,26 +5,17 @@ import datetime
 import csv
 
 command_list = {
+	bytes([0x07, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x6E]),	
 	bytes([0x66, 3, 0, 0, 0, 2]), #, 0x4c, 0x1b]), # "temperature": humidity
 	bytes([0x76, 3, 0, 0, 0, 2]), #, , 0x4E, 0x8b]), # "temperature": humidity
 
-	# bytes([0xCC, 0x03, 0x00, 0x03, 0x00, 0x03]), #, , 0xe5, 0xD6]), # "radiation": 
 	bytes([0xCC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
+	bytes([0xDC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
 
 	bytes([0xc8, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xd5, 0x92]), # "wind": 
 
-	# bytes([0xd9, 3, 0, 0, 0, 2]), #, , 0xd6, 0xd3]), # "rainfall": 
+	bytes([0xd9, 3, 0, 0, 0, 2]), #, , 0xd6, 0xd3]), # "rainfall": 
 	bytes([0xc9, 3, 0, 0, 0, 2]), #, , 0xd6, 0xd3]), # "rainfall": 
-      
-	# bytes([0xCC, 0x03, 0x00, 0x03, 0x00, 0x03, 0xe5, 0xD6]),  # radiation - indoor
-    # bytes([0xc8, 0x03, 0x00, 0x00, 0x00, 0x02, 0xd5, 0x92]),  # wind - indoor
-    # bytes([0x66, 3, 0, 0, 0, 8, 0x4c, 0x1b]),  # temperature - indoor
-    # bytes([0xc9, 3, 0, 0, 0, 2, 0xd4, 0x43]),  # rainfall - indoor
-    # bytes([0xdc, 3, 0, 3, 0, 3, 0xe7, 0x46]),  # radiation - outdoor
-    # bytes([0xd8, 3, 0, 0, 0, 2, 0xD7, 0x02]),  # wind - outdoor
-    # bytes([0x76, 3, 0, 0, 0, 8, 0x4E, 0x8b]),  # temperature
-    # bytes([0xd9, 3, 0, 0, 0, 2, 0xd6, 0xd3])  # rainfall - outdoor
-    
 }
 usb_mount_point = "/media/zw/_______"
 
@@ -129,6 +120,7 @@ def next_row(ser):
 			data_list = list(bytearray(recv_data))
 			print("data_list=", data_list)
 			
+			
 			if (recv_data[0] == 0xCC) :
 				if(recv_data[2] == 2) :
 					radiation_value = recv_data[3] * 0x100 + recv_data[4]
@@ -138,6 +130,15 @@ def next_row(ser):
 					radiation_value = recv_data[7] * 0x100 + recv_data[8]
 					print("radiation_value", radiation_value)
 
+			if (recv_data[0] == 0xDC) :
+				if(recv_data[2] == 2) :
+					radiation_value = recv_data[3] * 0x100 + recv_data[4]
+					print("radiation_value[DC]", radiation_value)
+
+				if(recv_data[2] == 6) :
+					radiation_value = recv_data[7] * 0x100 + recv_data[8]
+					print("radiation_value[DC]", radiation_value)					
+
 			# if (recv_data[0] == 0xDC) :
 			# 	radiation_value = recv_data[3] * 0x100 + recv_data[4]
 			# 	print("radiation_value", radiation_value)
@@ -145,7 +146,17 @@ def next_row(ser):
 			if (recv_data[0] == 0xC8) :
 				wind_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
 				print("wind_value", wind_value)
-				
+
+			if (recv_data[0] == 0x07) :
+				if recv_data[3] & 0b10000000 == 0:  # 2's complement
+					temperature = int(recv_data[5] * 0x100 + recv_data[6]) / 10
+				else:
+					temperature = int(recv_data[5] * 0x100 + recv_data[6]) / -10
+			
+				moisture_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
+
+				print("temperature", temperature, "moisture_value", moisture_value)
+
 			if (recv_data[0] == 0x66) :
 				if recv_data[3] & 0b10000000 == 0:  # 2's complement
 					temperature = int(recv_data[3] * 0x100 + recv_data[4]) / 100
@@ -155,7 +166,6 @@ def next_row(ser):
 				moisture_value = int(recv_data[5] * 0x100 + recv_data[6]) / 100
 				
 				print("temperature", temperature, "moisture_value", moisture_value)
-
 				
 			if (recv_data[0] == 0x76) :
 				if recv_data[3] & 0b10000000 == 0:  # 2's complement
