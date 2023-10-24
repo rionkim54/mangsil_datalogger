@@ -5,12 +5,16 @@ import datetime
 import csv
 
 command_list = {
-	bytes([0x07, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x6E]),	
-	bytes([0x66, 3, 0, 0, 0, 2]), #, 0x4c, 0x1b]), # "temperature": humidity
-	bytes([0x76, 3, 0, 0, 0, 2]), #, , 0x4E, 0x8b]), # "temperature": humidity
+	# bytes([0x07, 0x03, 0x00, 0x00, 0x00, 0x07]),	# T&H #1
+	bytes([0x08, 0x03, 0x00, 0x00, 0x00, 0x07]),	# T&H #2
+	#bytes([0x08, 0x03, 0x01, 0xF4, 0x00, 0x02]), # , 0x84, 0x9C]),
+	bytes([0x08, 0x03, 0x01, 0xFA, 0x00, 0x02]), # , 0x84, 0x9C]),
 
-	bytes([0xCC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
-	bytes([0xDC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
+	# bytes([0x66, 3, 0, 0, 0, 2]), #, 0x4c, 0x1b]), # "temperature": humidity
+	# bytes([0x76, 3, 0, 0, 0, 2]), #, , 0x4E, 0x8b]), # "temperature": humidity
+
+	# bytes([0xCC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
+	# bytes([0xDC, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xe5, 0xD6]), # "radiation": 
 
 	bytes([0xc8, 0x03, 0x00, 0x00, 0x00, 0x01]), #, , 0xd5, 0x92]), # "wind": 
 
@@ -67,6 +71,32 @@ def calculate_modbus_crc(data):
         crc = (crc >> 8) ^ crc_table[index]
     return crc & 0xFFFF
 
+def irradiance_to_lux(irradiance_watt_per_m2):
+    """Convert irradiance (in W/m^2) to illuminance (in lux) for sunlight.
+    
+    Note: This is a rough conversion for sunlight and may not be accurate under all conditions.
+    
+    Parameters:
+    - irradiance_watt_per_m2: The irradiance in W/m^2.
+    
+    Returns:
+    - illuminance in lux.
+    """
+    return irradiance_watt_per_m2 * 100000 / 1000  # Convert kW/m^2 to lux
+
+def lux_to_irradiance(lux):
+    """Convert illuminance (in lux) to irradiance (in W/m^2) for sunlight.
+    
+    Note: This is a rough conversion for sunlight and may not be accurate under all conditions.
+    
+    Parameters:
+    - lux: The illuminance in lux.
+    
+    Returns:
+    - irradiance in W/m^2.
+    """
+    return lux * 1000 / 100000  # Convert lux to kW/m^2
+
 def check_modbus_crc(data):
 
     # 원래 데이터의 마지막 2바이트 (CRC 값)
@@ -108,10 +138,10 @@ def next_row(ser):
 
 		# Add CRC to the data
 		data_with_crc = send_data + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-		# print(data_with_crc)
+		print(data_with_crc)
 		ser.write(data_with_crc)
 
-		time.sleep(0.5)
+		time.sleep(1)
 		
         # 데이터 수신 (응답의 길이는 19 bytes 임을 가정)
 		recv_data = ser.read(32)
@@ -147,15 +177,31 @@ def next_row(ser):
 				wind_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
 				print("wind_value", wind_value)
 
-			if (recv_data[0] == 0x07) :
-				if recv_data[3] & 0b10000000 == 0:  # 2's complement
-					temperature = int(recv_data[5] * 0x100 + recv_data[6]) / 10
-				else:
-					temperature = int(recv_data[5] * 0x100 + recv_data[6]) / -10
-			
-				moisture_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
+			if (recv_data[0] == 0x08) :
+				if (recv_data[2] == 14) :
+					if recv_data[3] & 0b10000000 == 0:  # 2's complement
+						temperature = int(recv_data[5] * 0x100 + recv_data[6]) / 10
+					else:
+						temperature = int(recv_data[5] * 0x100 + recv_data[6]) / -10
+				
+					moisture_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
 
-				print("temperature", temperature, "moisture_value", moisture_value)
+					print(recv_data[0], "temperature", temperature, "moisture_value", moisture_value)
+
+				if(recv_data[2] == 4) :
+					radiation_value = lux_to_irradiance(recv_data[5] * 0x100 + recv_data[6])
+					print("radiation_value", radiation_value)		
+
+
+			# if (recv_data[0] == 0x09) :
+			# 	if recv_data[3] & 0b10000000 == 0:  # 2's complement
+			# 		temperature = int(recv_data[5] * 0x100 + recv_data[6]) / 10
+			# 	else:
+			# 		temperature = int(recv_data[5] * 0x100 + recv_data[6]) / -10
+			
+			# 	moisture_value = int(recv_data[3] * 0x100 + recv_data[4]) / 10
+
+			# 	print(recv_data[0], "temperature", temperature, "moisture_value", moisture_value)
 
 			if (recv_data[0] == 0x66) :
 				if recv_data[3] & 0b10000000 == 0:  # 2's complement
@@ -165,7 +211,7 @@ def next_row(ser):
 			
 				moisture_value = int(recv_data[5] * 0x100 + recv_data[6]) / 100
 				
-				print("temperature", temperature, "moisture_value", moisture_value)
+				print(recv_data[0], "temperature", temperature, "moisture_value", moisture_value)
 				
 			if (recv_data[0] == 0x76) :
 				if recv_data[3] & 0b10000000 == 0:  # 2's complement
@@ -175,7 +221,7 @@ def next_row(ser):
 			
 				moisture_value = int(recv_data[5] * 0x100 + recv_data[6]) / 100
 				
-				print("temperature", temperature, "moisture_value", moisture_value)
+				print(recv_data[0], "temperature", temperature, "moisture_value", moisture_value)
 
 			if (recv_data[0] == 0xC9) :
 				rain_fall = int(recv_data[3] * 0x100 + recv_data[4]) / 10
